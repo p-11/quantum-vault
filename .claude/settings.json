@@ -1,0 +1,179 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install)",
+      "Bash(pnpm dev)",
+      "Bash(pnpm dev:*)",
+      "Bash(pnpm build:dev)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm l:c)",
+      "Bash(pnpm l:f)",
+      "Bash(pnpm p:c)",
+      "Bash(pnpm p:f)",
+      "Bash(pnpm preview)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm test:unit)",
+      "Bash(pnpm test:unit:*)",
+      "Bash(pnpm test:e2e:check)",
+      "Bash(pnpm ci:pr)",
+      "Bash(pnpm exec playwright *)",
+      "Bash(pnpm exec prettier *)",
+      "Bash(pnpm dlx *)",
+      "Bash(npx playwright *)",
+      "Bash(npx shadcn@latest add *)",
+      "Bash(npx prettier *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git fetch *)",
+      "Bash(git stash *)",
+      "Bash(git merge *)",
+      "Bash(git rebase *)",
+      "Bash(git cherry-pick *)",
+      "Bash(git restore *)",
+      "Bash(git reset *)",
+      "Bash(git switch *)",
+      "Bash(git config *)",
+      "Bash(git remote *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh pr ready *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh api *)",
+      "Bash(gh repo view *)",
+      "Bash(gh auth status)",
+      "Bash(gh auth switch *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www.figma.com)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/load-envrc.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous.sh\" \"$TOOL_INPUT\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous.sh\" \"$TOOL_INPUT\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous.sh\" \"$TOOL_INPUT\""
+          }
+        ]
+      },
+      {
+        "matcher": "MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous.sh\" \"$TOOL_INPUT\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-format.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-format.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-compact-reminder.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/on-failure-notify.sh"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/task-completed-check.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/quality-gate.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "subagentTools": {
+    "Explore": ["Read", "Glob", "Grep", "Bash"],
+    "Plan": ["Read", "Glob", "Grep", "Bash"]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "echo \"$(git branch --show-current 2>/dev/null || echo 'no-branch')\""
+  }
+}

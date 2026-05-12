@@ -1,0 +1,40 @@
+{
+  "prompts": [
+    {
+      "workflow": "feature-delivery",
+      "file": ".codex/prompts/orchestrate-feature.md"
+    },
+    {
+      "workflow": "pr-review",
+      "file": ".codex/prompts/orchestrate-review.md"
+    },
+    {
+      "workflow": "resolve-pr-comments",
+      "file": ".codex/prompts/resolve-pr-comments.md"
+    },
+    {
+      "workflow": "prepare-pr",
+      "file": ".codex/prompts/prepare-pr.md"
+    },
+    {
+      "workflow": "check-libqc",
+      "file": ".codex/prompts/check-libqc.md"
+    },
+    {
+      "workflow": "sync-repos",
+      "file": ".codex/prompts/sync-repos.md"
+    },
+    {
+      "workflow": "security-review",
+      "file": ".codex/prompts/security-review.md"
+    },
+    {
+      "workflow": "testing-guide",
+      "file": ".codex/prompts/testing-guide.md"
+    },
+    {
+      "workflow": "release-readiness",
+      "file": ".codex/prompts/release-readiness.md"
+    }
+  ]
+}

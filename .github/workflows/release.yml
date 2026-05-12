@@ -1,0 +1,204 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Production release tag to create, for example v0.0.15'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release_context:
+    name: Validate release context
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      release_tag: ${{ steps.release_context.outputs.release_tag }}
+      release_sha: ${{ steps.release_context.outputs.release_sha }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release refs
+        run: git fetch --tags --prune origin main
+
+      - name: Resolve release context
+        id: release_context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_VERSION: ${{ inputs.release_version || '' }}
+        run: |
+          set -euo pipefail
+
+          release_sha="$GITHUB_SHA"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            release_tag="$INPUT_RELEASE_VERSION"
+            main_sha="$(git rev-parse origin/main)"
+
+            if [[ "$release_sha" != "$main_sha" ]]; then
+              echo "::error::Manual production releases must be run from the latest main commit."
+              echo "::error::Selected ref resolved to '$release_sha', but origin/main is '$main_sha'."
+              exit 1
+            fi
+
+            if git rev-parse -q --verify "refs/tags/$release_tag" >/dev/null; then
+              echo "::error::Release tag '$release_tag' already exists."
+              exit 1
+            fi
+          else
+            release_tag="$GITHUB_REF_NAME"
+          fi
+
+          if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag '$release_tag' must look like v0.0.15."
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$release_sha" origin/main; then
+            echo "::error::Release tag '$release_tag' points to commit '$release_sha' that is not in origin/main history."
+            exit 1
+          fi
+
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+
+  libqc-freshness:
+    name: Validate libqc freshness
+    needs: release_context
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '24.11.1'
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org/
+
+      - name: Setup pnpm via Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.20.0 --activate
+          pnpm --version
+
+      - name: Verify NPM token
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -z "${NPM_TOKEN:-}" ]]; then
+            echo "::error::Missing required secret: NPM_TOKEN"
+            exit 1
+          fi
+
+      - name: Enforce latest libqc (or explicit override)
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          ALLOW_STALE_LIBQC_RELEASE: ${{ vars.ALLOW_STALE_LIBQC_RELEASE }}
+        run: |
+          set -euo pipefail
+          allow_flag=""
+          if [[ "${ALLOW_STALE_LIBQC_RELEASE:-false}" == "true" ]]; then
+            allow_flag="--allow-stale"
+          fi
+          node scripts/libqc-freshness.mjs --require-latest ${allow_flag}
+
+  release-ci:
+    name: Production CI
+    needs:
+      - release_context
+      - libqc-freshness
+    uses: ./.github/workflows/_ci-shared.yml
+    secrets: inherit
+    with:
+      fetch-depth: 0
+      job-timeout-minutes: 30
+      environment-name: production
+      run-unit-tests: true
+      run-build: true
+      build-command: pnpm run build:prod
+      run-lint: true
+      run-typecheck: true
+      run-prettier: true
+      run-knip: true
+      run-depdoc: true
+      run-trivy: true
+      run-package: true
+      package-command: pnpm run build:package:prod
+      upload-package-artifact: true
+
+  production-release:
+    name: Create production release
+    needs:
+      - release_context
+      - release-ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download extension zip
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: chrome-extension-zip
+          path: release
+
+      - name: Create production release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.release_context.outputs.release_tag }}
+          name: ${{ needs.release_context.outputs.release_tag }}
+          target_commitish: ${{ needs.release_context.outputs.release_sha }}
+          files: release/chrome-extension.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          append_body: false
+
+  notify-slack:
+    name: Notify Slack about release
+    needs:
+      - release_context
+      - production-release
+    runs-on: ubuntu-latest
+    if: ${{ needs.production-release.result == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release history
+        run: git fetch --tags --force --prune origin
+
+      - name: Send release summary to Slack
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.release_context.outputs.release_tag }}
+          RELEASE_SHA: ${{ needs.release_context.outputs.release_sha }}
+          SLACK_RELEASE_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
+        run: bash .github/scripts/notify-release-slack.sh

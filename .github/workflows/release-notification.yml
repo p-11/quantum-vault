@@ -1,0 +1,40 @@
+name: Release Notification
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release tag to notify, for example v0.0.17'
+        required: true
+        type: string
+      release_sha:
+        description: 'Release commit SHA. Optional; defaults to the selected workflow ref.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  notify-slack:
+    name: Notify Slack about release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release history
+        run: git fetch --tags --force --prune origin
+
+      - name: Send release summary to Slack
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_version }}
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+          SLACK_RELEASE_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_WEBHOOK_URL }}
+        run: bash .github/scripts/notify-release-slack.sh

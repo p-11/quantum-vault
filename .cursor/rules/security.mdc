@@ -1,0 +1,15 @@
+---
+description: Extension security rules
+globs: ["src/hooks/use-session-timeout.ts", "src/providers/**", "manifest.json"]
+alwaysApply: false
+---
+
+# Extension Security
+
+- Session timeout: 10 min inactivity, centralized in useSessionTimeout
+- Reset on mouse/keyboard/touch/scroll
+- Update AUTHENTICATED_SCREENS when adding authenticated screens
+- Lock flow: clear in-memory state -> clear cached key -> navigate to lock screen
+- Never log password/mnemonic/keys
+- Strict CSP: script-src 'self'
+- Env vars must use VITE_* prefix

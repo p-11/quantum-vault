@@ -1,0 +1,254 @@
+name: LibQC Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      libqc_version:
+        description: Exact libqc version to pin (leave empty to auto-resolve latest published version)
+        required: false
+        default: ''
+        type: string
+      draft_pr:
+        description: Create the dependency bump PR as draft
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: '0 4 * * 1-5'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.inputs.libqc_version || 'latest' }}
+  cancel-in-progress: true
+
+jobs:
+  bump-libqc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Enforce main-branch dispatch
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Run this workflow from the main branch only."
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '24.11.1'
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org/
+
+      - name: Setup pnpm via Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.20.0 --activate
+          pnpm --version
+
+      - name: Verify required secrets
+        env:
+          VITE_ETHEREUM_RPC_URL: ${{ secrets.VITE_ETHEREUM_RPC_URL }}
+          VITE_ETHEREUM_BUNDLER_RPC_URL: ${{ secrets.VITE_ETHEREUM_BUNDLER_RPC_URL }}
+          VITE_ETHEREUM_BUNDLER_API_KEY: ${{ secrets.VITE_ETHEREUM_BUNDLER_API_KEY }}
+          VITE_BITCOIN_API_URL: ${{ secrets.VITE_BITCOIN_API_URL }}
+          VITE_ASSET_PRICES_URL: ${{ secrets.VITE_ASSET_PRICES_URL }}
+          VITE_REGISTER_URL: ${{ secrets.VITE_REGISTER_URL }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bash .github/scripts/verify-secrets.sh
+
+      - name: Verify CI PR token
+        env:
+          CI_PR_TOKEN: ${{ secrets.CI_PR_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${CI_PR_TOKEN:-}" ]]; then
+            echo "::error::Missing required secret: CI_PR_TOKEN"
+            echo "::error::Use a PAT or GitHub App token with contents:write + pull-requests:write to allow downstream PR checks to run."
+            exit 1
+          fi
+
+          probe_branch="codex/ci-pr-token-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          basic_auth="$(printf 'x-access-token:%s' "$CI_PR_TOKEN" | base64 | tr -d '\n')"
+
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic_auth}" \
+            push --dry-run "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/${probe_branch}" >/dev/null
+
+          PROBE_BRANCH="$probe_branch" node --input-type=module <<'NODE'
+          const expectedValidationFailureStatus = 422;
+          const repo = process.env.GITHUB_REPOSITORY;
+          const token = process.env.CI_PR_TOKEN;
+          const probeBranch = process.env.PROBE_BRANCH;
+
+          const response = await fetch(`https://api.github.com/repos/${repo}/pulls`, {
+            method: 'POST',
+            headers: {
+              Accept: 'application/vnd.github+json',
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'X-GitHub-Api-Version': '2022-11-28'
+            },
+            body: JSON.stringify({
+              title: 'CI_PR_TOKEN permission probe',
+              head: probeBranch,
+              base: 'main',
+              body: 'Validation-only permission probe. The branch is never pushed, so no pull request should be created.'
+            })
+          });
+
+          if (response.status === expectedValidationFailureStatus) {
+            process.exit(0);
+          }
+
+          console.error(
+            `::error::CI_PR_TOKEN cannot create pull requests for ${repo}. Expected validation status ${expectedValidationFailureStatus}, got ${response.status}.`
+          );
+          process.exit(1);
+          NODE
+
+      - name: Install dependencies
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Resolve target libqc version
+        id: resolve_target
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          MANUAL_LIBQC_VERSION: ${{ github.event.inputs.libqc_version || '' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${MANUAL_LIBQC_VERSION}" ]]; then
+            target_version="${MANUAL_LIBQC_VERSION}"
+            source="manual-input"
+          else
+            target_version="$(node scripts/libqc-freshness.mjs --print-latest)"
+            source="latest-published"
+          fi
+
+          echo "Resolved libqc version (${source}): ${target_version}"
+          echo "version=${target_version}" >> "$GITHUB_OUTPUT"
+          echo "source=${source}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump libqc dependency
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          LIBQC_VERSION: ${{ steps.resolve_target.outputs.version }}
+        run: node scripts/bump-libqc.mjs --libqc-version "$LIBQC_VERSION"
+
+      - name: Enforce expected file changes
+        id: change_check
+        run: |
+          set -euo pipefail
+
+          expected_files=(
+            "package.json"
+            "pnpm-lock.yaml"
+          )
+
+          changed_files="$(git diff --name-only)"
+
+          if [[ -z "$changed_files" ]]; then
+            echo "No dependency changes detected. Skipping preflight and PR creation."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            if [[ "$file" != "package.json" && "$file" != "pnpm-lock.yaml" ]]; then
+              echo "::error::Unexpected changed file for libqc bump workflow: $file"
+              exit 1
+            fi
+          done <<< "$changed_files"
+
+          for expected in "${expected_files[@]}"; do
+            if ! grep -qx "$expected" <<< "$changed_files"; then
+              echo "::error::Expected changed file not found: $expected"
+              exit 1
+            fi
+          done
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run preflight checks
+        if: ${{ steps.change_check.outputs.has_changes == 'true' }}
+        env:
+          VITE_ETHEREUM_RPC_URL: ${{ secrets.VITE_ETHEREUM_RPC_URL }}
+          VITE_ETHEREUM_BUNDLER_RPC_URL: ${{ secrets.VITE_ETHEREUM_BUNDLER_RPC_URL }}
+          VITE_ETHEREUM_BUNDLER_API_KEY: ${{ secrets.VITE_ETHEREUM_BUNDLER_API_KEY }}
+          VITE_BITCOIN_API_URL: ${{ secrets.VITE_BITCOIN_API_URL }}
+          VITE_ASSET_PRICES_URL: ${{ secrets.VITE_ASSET_PRICES_URL }}
+          VITE_REGISTER_URL: ${{ secrets.VITE_REGISTER_URL }}
+        run: |
+          pnpm run l:c
+          pnpm run p:c
+          pnpm run typecheck
+          pnpm run test:unit
+          pnpm run build:dev
+
+      - name: Capture libqc version
+        id: libqc_version
+        if: ${{ steps.change_check.outputs.has_changes == 'true' }}
+        run: |
+          version=$(node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const libqcVersion = packageJson.dependencies['@project-eleven/libqc'];
+          process.stdout.write(libqcVersion);
+          NODE
+          )
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update bump PR
+        if: ${{ steps.change_check.outputs.has_changes == 'true' }}
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
+        with:
+          token: ${{ secrets.CI_PR_TOKEN }}
+          branch-token: ${{ secrets.CI_PR_TOKEN }}
+          commit-message: 'chore(deps): bump @project-eleven/libqc to ${{ steps.libqc_version.outputs.value }}'
+          title: 'chore(deps): bump @project-eleven/libqc to ${{ steps.libqc_version.outputs.value }}'
+          body: |
+            ## Summary
+            - Bumps `@project-eleven/libqc` to `${{ steps.libqc_version.outputs.value }}`.
+            - Updated by the manual `LibQC Bump` workflow.
+
+            ## Upgrade rationale
+            - [ ] Security fix
+            - [ ] Required feature/API change
+            - [ ] Routine dependency maintenance
+            - [ ] Other (describe below)
+
+            ## QA checklist
+            - [ ] Verified only `package.json` and `pnpm-lock.yaml` changed
+            - [ ] PR checks passed (`pr.yml`)
+            - [ ] Smoke-tested extension locally or from merged-main prerelease artifact
+            - [ ] Confirmed no auth/session regressions in wallet flows
+
+            ## Release plan
+            - Merge PR after review.
+            - Create a production tag (`v*`) on merged main commit.
+            - `release.yml` publishes the production release artifact.
+          base: main
+          branch: codex/libqc-bump-${{ steps.libqc_version.outputs.value }}
+          delete-branch: true
+          labels: |
+            dependencies
+            libqc
+          draft: ${{ github.event_name == 'schedule' || github.event.inputs.draft_pr == 'true' }}

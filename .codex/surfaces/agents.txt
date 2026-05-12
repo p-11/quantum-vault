@@ -1,0 +1,6 @@
+code-reviewer
+investigator
+pr-preparer
+refactorer
+styling
+test-writer

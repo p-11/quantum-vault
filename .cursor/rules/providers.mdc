@@ -1,0 +1,19 @@
+---
+description: Provider patterns and topology
+globs: ["src/providers/**/*.tsx"]
+alwaysApply: false
+---
+
+# Provider Patterns
+
+Required order: CurrencyProvider -> WalletProvider -> ScreenProvider.
+Changing order can break initialization, navigation, and timeout behavior.
+
+- WalletProvider: single LibQC instance (useRef), wallet/account/balance state, context methods
+- CurrencyProvider: selected currency + persistence
+- ScreenProvider: active screen + transition + hydration + session timeout
+
+Each provider has paired useX hook that throws outside provider context.
+
+Target: setupValueProvider<T>() / setupStateProvider<T>() factory pattern.
+CurrencyProvider is simplest migration candidate. Do not migrate without dedicated ticket.

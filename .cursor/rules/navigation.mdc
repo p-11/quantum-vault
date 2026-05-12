@@ -1,0 +1,14 @@
+---
+description: Screen navigation patterns
+globs: ["src/screens.tsx", "src/providers/screen-provider.tsx", "src/components/*-screen.tsx"]
+alwaysApply: false
+---
+
+# Screen Navigation
+
+- Registry: screens object in src/screens.tsx is source of truth
+- ScreenKey derived from keyof typeof screens
+- Navigate: useScreen().navigate(screenKey, { direction, type })
+- Hydration: ScreenProvider decides initial screen from vault state - don't bypass
+- Screen components should use hooks directly (component autonomy)
+- Keep data-testid and visible labels stable for E2E

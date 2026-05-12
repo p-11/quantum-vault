@@ -1,0 +1,84 @@
+name: Pull Requests
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# Cancel any in-progress run for the same PR branch when a new commit
+# is pushed. Saves CI minutes and gets faster signal on the latest code.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Static checks
+    uses: ./.github/workflows/_ci-shared.yml
+    secrets: inherit
+    with:
+      job-timeout-minutes: 15
+      run-lint: true
+      run-typecheck: true
+      run-prettier: true
+      run-knip: true
+      run-depdoc: true
+
+  unit:
+    name: Unit tests
+    uses: ./.github/workflows/_ci-shared.yml
+    secrets: inherit
+    with:
+      job-timeout-minutes: 15
+      run-unit-tests: true
+
+  build:
+    name: Build
+    uses: ./.github/workflows/_ci-shared.yml
+    secrets: inherit
+    with:
+      job-timeout-minutes: 25
+      run-build: true
+      build-command: pnpm run build:prod && pnpm run validate:prod
+
+  smoke-e2e:
+    name: Smoke E2E
+    uses: ./.github/workflows/_ci-shared.yml
+    secrets: inherit
+    with:
+      job-timeout-minutes: 20
+      run-build: true
+      build-command: pnpm run build:prod && pnpm run validate:prod
+      run-e2e: true
+      e2e-command: pnpm run test:e2e:smoke
+      e2e-report-artifact-name: playwright-report-smoke
+
+  security-scan:
+    name: Security scan
+    uses: ./.github/workflows/_ci-shared.yml
+    secrets: inherit
+    with:
+      job-timeout-minutes: 20
+      run-trivy: true
+
+  pr-ci:
+    name: pr-ci / ci
+    needs:
+      - static
+      - unit
+      - build
+      - smoke-e2e
+      - security-scan
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fail when split PR checks fail
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
+
+      - name: Confirm split PR checks passed
+        run: echo "All split PR checks passed."

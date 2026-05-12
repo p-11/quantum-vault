@@ -1,0 +1,20 @@
+---
+description: Quantum-vault Chrome extension project overview
+globs: ["**/*.ts", "**/*.tsx"]
+alwaysApply: true
+---
+
+# quantum-vault - Chrome Extension Wallet UI
+
+Stack: React 19 + Vite + Manifest V3 + Tailwind v4 + shadcn/ui (New York) + @project-eleven/libqc.
+Package manager: pnpm only. Never yarn or npm.
+
+Commands:
+- pnpm dev - Vite dev
+- pnpm build:dev - build to build/
+- pnpm l:c / pnpm l:f - ESLint check/fix
+- pnpm p:c / pnpm p:f - Prettier check/fix
+
+Provider order (CRITICAL): CurrencyProvider -> WalletProvider -> ScreenProvider.
+Screen registry in src/screens.tsx. ScreenKey derived from screens object.
+WalletProvider owns single LibQC instance via useRef. Popup fixed at ~400px.

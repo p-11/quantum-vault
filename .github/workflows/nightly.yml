@@ -1,0 +1,100 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  trivy-health:
+    name: Trivy health
+    uses: ./.github/workflows/_ci-shared.yml
+    with:
+      job-timeout-minutes: 20
+      run-trivy: true
+    secrets: inherit
+
+  e2e-full:
+    name: E2E full (${{ matrix.shard.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - id: 1
+            total: 2
+            name: shard-1-of-2
+          - id: 2
+            total: 2
+            name: shard-2-of-2
+    uses: ./.github/workflows/_ci-shared.yml
+    with:
+      job-timeout-minutes: 25
+      run-build: true
+      build-command: pnpm run build:prod && pnpm run validate:prod
+      run-e2e: true
+      e2e-command: pnpm run test:e2e:full:ci --shard=${{ matrix.shard.id }}/${{ matrix.shard.total }} --reporter=blob
+      e2e-report-artifact-name: playwright-blob-${{ matrix.shard.name }}
+      e2e-report-path: blob-report/
+    secrets: inherit
+
+  e2e-merge-report:
+    name: E2E merged report
+    needs:
+      - e2e-full
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@26f6d4f2c533a43e6b5da0b4a5dd983f98f7b49a
+        with:
+          version: 10.20.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '24.11.1'
+          cache: 'pnpm'
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Download shard blob reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: playwright-blob-*
+          merge-multiple: true
+          path: blob-report
+
+      - name: Merge shard reports
+        run: pnpm exec playwright merge-reports --config=playwright.merge.config.ts ./blob-report
+
+      - name: Upload merged Playwright report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: playwright-report-full
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload merged machine-readable reports
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: playwright-reports-machine-readable
+          path: |
+            test-results/merged-results.json
+            test-results/merged-junit.xml
+          retention-days: 14

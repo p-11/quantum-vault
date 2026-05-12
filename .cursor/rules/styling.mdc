@@ -1,0 +1,15 @@
+---
+description: Tailwind v4 styling conventions
+globs: ["src/**/*.tsx", "src/index.css"]
+alwaysApply: false
+---
+
+# Styling
+
+- Tailwind v4 CSS-first config in src/index.css (@theme inline)
+- Do NOT introduce tailwind.config.js
+- Semantic CSS variables for brand tokens - never hardcode hex colors
+- cn() utility for class composition (clsx + tailwind-merge)
+- shadcn/ui New York variant - reuse existing src/components/ui/* before creating new
+- Geist fonts (bundled locally), Lucide React icons
+- Popup constrained to ~400px width

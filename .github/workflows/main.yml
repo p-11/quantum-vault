@@ -1,0 +1,59 @@
+name: Main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+# Serialize main pushes but never cancel one mid-flight: this workflow
+# packages and releases the extension, and a follow-up commit must not
+# kill an in-progress release build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  main-ci:
+    uses: ./.github/workflows/_ci-shared.yml
+    secrets: inherit
+    with:
+      fetch-depth: 0
+      job-timeout-minutes: 30
+      environment-name: staging
+      run-unit-tests: true
+      run-build: true
+      build-command: pnpm run build:prod && pnpm run validate:prod
+      run-lint: true
+      run-typecheck: true
+      run-prettier: true
+      run-knip: true
+      run-depdoc: true
+      run-e2e: true
+      e2e-command: pnpm run test:e2e:smoke
+      e2e-report-artifact-name: playwright-report-main-smoke
+      run-package: true
+      package-command: pnpm run build:package:prod
+      upload-package-artifact: true
+
+  prerelease:
+    needs: main-ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download extension zip
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: chrome-extension-zip
+          path: release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: release/chrome-extension.zip
+          prerelease: true
+          tag_name: 'prerelease-${{ github.sha }}'

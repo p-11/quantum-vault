@@ -1,0 +1,202 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Thrya Design System - Project Eleven
+ *
+ * Single dark theme built on the Zinc palette. The extension popup is
+ * permanently dark (see `index.html` class="dark"), so light tokens are
+ * intentionally absent.
+ *
+ * Font stack:
+ *   --font-sans: thrya-sans (Suisse Int'l), system-ui.
+ *   --font-mono: geist-mono.
+ *
+ * Palette:
+ *   Background / Card         #09090B  (Zinc 950)
+ *   Popover                   #18181B  (Zinc 900)
+ *   Secondary / Accent / Tile #27272A  (Zinc 800)
+ *   Footer muted              #71717A  (Zinc 500)
+ *   Body muted                #A1A1AA  (Zinc 400)
+ *   Primary (button bg)       #E4E4E7  (Zinc 200)
+ *   Foreground                #FAFAFA  (Zinc 50)
+ *   Primary foreground        #18181B  (Zinc 900)
+ *   Destructive               #DC2626  (Red 600)
+ *   Input error helper        #F87171  (Red 400)
+ *   Success / Safe             #BDFF17  (Lime)
+ *   Warning                   #FF9532  (Orange, matches Thrya Figma warning states)
+ *
+ * Geometry:
+ *   Border radius: 0px on all elements (sharp-cornered Thrya aesthetic).
+ */
+
+@theme inline {
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  --font-sans: 'thrya-sans', system-ui, sans-serif;
+  --font-mono: 'geist-mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --popup-width: 360px;
+  --popup-height: 600px;
+  --popup-content-height: 568px;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-footer-muted: var(--footer-muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input-error: var(--input-error);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-divider: var(--divider);
+  --color-selected-foreground: var(--selected-foreground);
+  --color-skeleton: var(--skeleton);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root,
+.dark {
+  --radius: 0px;
+
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #09090b;
+  --card-foreground: #fafafa;
+  --popover: #18181b;
+  --popover-foreground: #fafafa;
+  --primary: #e4e4e7;
+  --primary-foreground: #18181b;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --footer-muted: #71717a;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --destructive: #dc2626;
+  --input-error: #f87171;
+  --success: #bdff17;
+  --warning: #ff9532;
+  --warning-foreground: #09090b;
+  --divider: #18181b;
+  --selected-foreground: #feff0d;
+  --border: rgba(255, 255, 255, 0.15);
+  --toast-border: var(--secondary);
+  --skeleton: rgba(255, 255, 255, 0.14);
+  --input: rgba(255, 255, 255, 0.05);
+  --ring: #fafafa;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply font-sans bg-background text-foreground antialiased;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+  strong {
+    @apply font-medium;
+  }
+}
+
+/*
+ * Typography presets mapped from Figma text styles.
+ * Each preset bundles size + weight + line-height into a single class.
+ * See Thrya UI Figma for the canonical definitions.
+ */
+
+@layer components {
+  .type-display {
+    @apply text-6xl leading-none font-normal;
+  }
+  .type-heading-xl {
+    @apply text-4xl leading-[1.11em] font-normal;
+  }
+  .type-value-xl {
+    @apply text-4xl leading-none font-normal;
+  }
+  .type-heading-lg {
+    @apply text-2xl leading-8 font-normal;
+  }
+  .type-title-bar {
+    @apply text-lg leading-none font-normal;
+  }
+  .type-body {
+    @apply text-base leading-normal font-normal;
+  }
+  .type-body-medium {
+    @apply text-base leading-normal font-medium;
+  }
+  .type-body-tight {
+    @apply text-base leading-none font-normal;
+  }
+  .type-label {
+    @apply text-sm leading-5 font-medium;
+  }
+  .type-body-sm {
+    @apply text-sm leading-5 font-normal;
+  }
+  .type-caption {
+    @apply text-xs leading-normal font-normal;
+  }
+  .type-footnote {
+    @apply text-xs leading-none font-normal;
+  }
+
+  /* Subtree sharp-corner override for flows that need 0 border-radius. */
+  .sharp,
+  .sharp * {
+    border-radius: 0 !important;
+  }
+}
+
+/* thrya-sans: Suisse Int'l, the Thrya brand typeface. */
+
+@font-face {
+  font-family: 'thrya-sans';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/SuisseIntl-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'thrya-sans';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/SuisseIntl-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'geist-mono';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src:
+    url('fonts/GeistMono-Regular.woff2') format('woff2'),
+    url('fonts/GeistMono-Regular.woff') format('woff');
+}

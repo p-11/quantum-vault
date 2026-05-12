@@ -1,0 +1,27 @@
+---
+description: Anti-patterns to avoid in quantum-vault
+globs: ["**/*.ts", "**/*.tsx"]
+alwaysApply: true
+---
+
+# Anti-Patterns
+
+Canonical source for Claude/Codex parity: `.claude/rules/anti-patterns.md`.
+
+## Core
+
+1. switch/case - use match() or Record<Key, Value> lookup
+2. try/catch for flow control - use attempt() with [data, err] tuple
+3. `as` type assertions - use type narrowing, guards, or discriminated unions
+4. `?.` / `??` on non-optional types - trust types, use ensurePresent()
+5. Hardcoded magic values - use named constants or convertDuration()
+6. useMemo/useCallback - React Compiler handles memoization
+
+## quantum-vault-Specific
+
+7. Hardcoded hex colors - use theme tokens
+8. if (isLoading) manual checks - use MatchQuery
+9. Generic components/ folder - use feature-based organization
+10. Altering provider order without explicit architecture scope
+11. Silent early returns in user-action handlers
+12. Bypassing ScreenProvider hydration flow

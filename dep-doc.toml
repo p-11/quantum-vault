@@ -1,0 +1,194 @@
+[[dependency]]
+name = "babel-plugin-react-compiler"
+purpose = "React Compiler - automatic memoization at build time"
+scope = "dev"
+
+[[dependency]]
+name = "@eslint/js"
+purpose = "Linting"
+scope = "dev"
+
+[[dependency]]
+name = "@radix-ui/react-label"
+purpose = "Shadcn support"
+scope = "prod"
+
+[[dependency]]
+name = "@radix-ui/react-slot"
+purpose = "Shadcn support"
+scope = "prod"
+
+[[dependency]]
+name = "@radix-ui/react-tabs"
+purpose = "Shadcn support"
+scope = "prod"
+
+[[dependency]]
+name = "@tailwindcss/vite"
+purpose = "Tailwind support for Vite"
+scope = "prod"
+
+[[dependency]]
+name = "@tanstack/react-query"
+purpose = "Async server-state caching, retries, and query invalidation"
+scope = "prod"
+
+[[dependency]]
+name = "@types/node"
+purpose = "Node types"
+scope = "dev"
+
+[[dependency]]
+name = "@types/react"
+purpose = "React types"
+scope = "dev"
+
+[[dependency]]
+name = "@types/react-dom"
+purpose = "React DOM types"
+scope = "dev"
+
+[[dependency]]
+name = "@vitejs/plugin-react"
+purpose = "Vite support for React"
+scope = "dev"
+
+[[dependency]]
+name = "@crxjs/vite-plugin"
+purpose = "Chrome extension build/HMR support and manifest integration"
+scope = "dev"
+
+[[dependency]]
+name = "class-variance-authority"
+purpose = "Classname helper"
+scope = "prod"
+
+[[dependency]]
+name = "clsx"
+purpose = "Classname helper"
+scope = "prod"
+
+[[dependency]]
+name = "eslint"
+purpose = "Linting"
+scope = "dev"
+
+[[dependency]]
+name = "eslint-plugin-react-hooks"
+purpose = "Linting"
+scope = "dev"
+
+[[dependency]]
+name = "eslint-plugin-react-refresh"
+purpose = "Linting"
+scope = "dev"
+
+[[dependency]]
+name = "globals"
+purpose = "Linting"
+scope = "dev"
+
+[[dependency]]
+name = "lucide-react"
+purpose = "UI icons"
+scope = "prod"
+
+[[dependency]]
+name = "prettier"
+purpose = "Code formatting"
+scope = "dev"
+
+[[dependency]]
+name = "react"
+purpose = "UI library"
+scope = "prod"
+
+[[dependency]]
+name = "react-dom"
+purpose = "React DOM compatibility"
+scope = "prod"
+
+[[dependency]]
+name = "sonner"
+purpose = "Toaster component"
+scope = "prod"
+
+[[dependency]]
+name = "tailwind-merge"
+purpose = "Tailwind helper"
+scope = "prod"
+
+[[dependency]]
+name = "tailwindcss"
+purpose = "Tailwind support"
+scope = "prod"
+
+[[dependency]]
+name = "tw-animate-css"
+purpose = "Tailwind support"
+scope = "dev"
+
+[[dependency]]
+name = "typescript"
+purpose = "Typescript support"
+scope = "dev"
+
+[[dependency]]
+name = "knip"
+purpose = "Detect unused files, exports, and dependencies"
+scope = "dev"
+
+[[dependency]]
+name = "only-allow"
+purpose = "Enforces pnpm as the only allowed package manager"
+scope = "dev"
+
+[[dependency]]
+name = "typescript-eslint"
+purpose = "Linting"
+scope = "dev"
+
+[[dependency]]
+name = "vite"
+purpose = "Bundler and dev server"
+scope = "dev"
+
+[[dependency]]
+name = "vite-plugin-node-polyfills"
+purpose = "Node polyfills"
+scope = "dev"
+
+[[dependency]]
+name = "vite-plugin-static-copy"
+purpose = "Copying files at build time"
+scope = "dev"
+
+[[dependency]]
+name = "framer-motion"
+purpose = "UI animations"
+scope = "prod"
+
+[[dependency]]
+name = "@playwright/test"
+purpose = "E2E testing"
+scope = "dev"
+
+[[dependency]]
+name = "dotenv"
+purpose = "Load env vars for E2E tests"
+scope = "dev"
+
+[[dependency]]
+name = "@project-eleven/libqc"
+purpose = "Project Eleven's core library for interacting with quantum-safe wallets"
+scope = "prod"
+
+[[dependency]]
+name = "qrcode.react"
+purpose = "QR code generation for deposit addresses"
+scope = "prod"
+
+[[dependency]]
+name = "vitest"
+purpose = "Unit testing framework for src/lib utility functions"
+scope = "dev"

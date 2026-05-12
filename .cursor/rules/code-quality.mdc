@@ -1,0 +1,9 @@
+---
+description: quantum-vault-specific code quality (see P11 org rules for shared standards)
+globs: ["src/**/*.ts", "src/**/*.tsx"]
+alwaysApply: true
+---
+
+# Code Quality - quantum-vault Additions
+
+- Run `pnpm l:c && pnpm p:c` after every code change

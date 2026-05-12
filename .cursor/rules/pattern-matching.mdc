@@ -1,0 +1,10 @@
+---
+description: quantum-vault-specific pattern matching additions (see P11 org rules for core patterns)
+globs: ["src/**/*.ts", "src/**/*.tsx"]
+alwaysApply: true
+---
+
+# Pattern Matching - quantum-vault Additions
+
+- JSX conditional rendering: `<Match value={status} loading={() => ...} />`
+- Async UI state: `<MatchQuery value={query} pending={...} error={...} success={...} />`

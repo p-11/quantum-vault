@@ -1,0 +1,28 @@
+{
+  "name": "Quantum Vault",
+  "description": "Preparing Crypto for the Quantum Era",
+  "version": "0.0.1",
+  "manifest_version": 3,
+  "action": {
+    "default_popup": "index.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "host_permissions": [
+    "https://rpc.projecteleven.com/*",
+    "https://bundler.projecteleven.com/*",
+    "https://keys.projecteleven.com/*",
+    "https://assets.projecteleven.com/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+  }
+}

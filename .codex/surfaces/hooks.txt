@@ -1,0 +1,7 @@
+block-dangerous.sh
+load-envrc.sh
+on-failure-notify.sh
+post-compact-reminder.sh
+post-edit-format.sh
+quality-gate.sh
+task-completed-check.sh

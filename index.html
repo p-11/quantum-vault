@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en" class="dark" data-mode="%MODE%">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quantum Vault</title>
+    <style>
+      /*
+       * Popup shell: flat (zero-radius) edge-to-edge dark paint.
+       *
+       * Chrome on macOS applies an OS-level rounded mask to the popup window
+       * that CSS cannot override. The defensive `border-radius: 0` + dark
+       * `color-scheme` pairing guarantees every layer stays square and that
+       * the rounded mask's anti-aliased edges composite against the dark
+       * background (#09090b) instead of Chrome's default white.
+       */
+
+      html {
+        color-scheme: dark;
+      }
+
+      html,
+      body,
+      #root,
+      #boot-shell {
+        border-radius: 0;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 360px;
+        height: 600px;
+        min-height: 600px;
+        overflow: hidden;
+        background: #09090b;
+        color: #fafafa;
+      }
+
+      body {
+        position: relative;
+        font-family:
+          'thrya-sans',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+
+      #root {
+        position: relative;
+        z-index: 1;
+        width: 360px;
+        height: 600px;
+        min-height: 600px;
+        overflow: hidden;
+        background: #09090b;
+      }
+
+      #boot-shell {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        width: 360px;
+        height: 600px;
+        min-height: 600px;
+        background: #09090b;
+        box-sizing: border-box;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 80ms ease-out;
+        animation: boot-shell-reveal 0s linear 650ms forwards;
+      }
+
+      html[data-mode='production'] #boot-shell {
+        animation-delay: 280ms;
+      }
+
+      #boot-shell[data-state='hidden'] {
+        animation: none;
+        opacity: 0;
+      }
+
+      @keyframes boot-shell-reveal {
+        to {
+          opacity: 1;
+        }
+      }
+
+      #boot-shell__screen {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 600px;
+        padding: 32px 16px 16px;
+        background: #09090b;
+        box-sizing: border-box;
+      }
+
+      #boot-shell__mark {
+        width: 80px;
+        height: 38px;
+        background: #fafafa;
+        mask-size: contain;
+        mask-repeat: no-repeat;
+      }
+
+      #boot-shell__title {
+        margin: 32px 0 0;
+        font-size: 60px;
+        font-weight: 400;
+        line-height: 1;
+      }
+
+      #boot-shell__footer {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      #boot-shell__actions {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .boot-shell__button {
+        height: 44px;
+        background: #e4e4e7;
+      }
+
+      #boot-shell__copyright {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1;
+        text-align: center;
+        color: #71717a;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot-shell" aria-hidden="true">
+      <div id="boot-shell__screen">
+        <div>
+          <div id="boot-shell__mark"></div>
+          <h1 id="boot-shell__title">Quantum Vault</h1>
+        </div>
+
+        <div id="boot-shell__footer">
+          <div id="boot-shell__actions">
+            <div class="boot-shell__button"></div>
+            <div class="boot-shell__button"></div>
+          </div>
+          <p id="boot-shell__copyright">&copy; PROJECT ELEVEN</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

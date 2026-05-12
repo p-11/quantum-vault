@@ -1,0 +1,202 @@
+name: Shared CI
+
+on:
+  workflow_call:
+    inputs:
+      fetch-depth:
+        type: number
+        default: 1
+      job-timeout-minutes:
+        type: number
+        default: 30
+      run-unit-tests:
+        type: boolean
+        default: false
+      run-build:
+        type: boolean
+        default: false
+      build-command:
+        type: string
+        default: pnpm run build:prod && pnpm run validate:prod
+      run-lint:
+        type: boolean
+        default: false
+      run-typecheck:
+        type: boolean
+        default: false
+      run-prettier:
+        type: boolean
+        default: false
+      run-knip:
+        type: boolean
+        default: false
+      run-depdoc:
+        type: boolean
+        default: false
+      run-trivy:
+        type: boolean
+        default: false
+      run-e2e:
+        type: boolean
+        default: false
+      e2e-command:
+        type: string
+        default: pnpm run test:e2e
+      upload-e2e-report:
+        type: boolean
+        default: true
+      e2e-report-artifact-name:
+        type: string
+        default: playwright-report
+      e2e-report-path:
+        type: string
+        default: |
+          playwright-report/
+          test-results/
+      run-package:
+        type: boolean
+        default: false
+      package-command:
+        type: string
+        default: pnpm run build:package
+      upload-package-artifact:
+        type: boolean
+        default: false
+      package-artifact-name:
+        type: string
+        default: chrome-extension-zip
+      package-artifact-path:
+        type: string
+        default: release/chrome-extension.zip
+      package-artifact-retention-days:
+        type: number
+        default: 14
+      environment-name:
+        type: string
+        default: ''
+    secrets:
+      VITE_ETHEREUM_RPC_URL:
+        required: false
+      VITE_ETHEREUM_BUNDLER_RPC_URL:
+        required: false
+      VITE_ETHEREUM_BUNDLER_API_KEY:
+        required: false
+      VITE_BITCOIN_API_URL:
+        required: false
+      VITE_ASSET_PRICES_URL:
+        required: false
+      VITE_REGISTER_URL:
+        required: false
+      NPM_TOKEN:
+        required: false
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment-name }}
+    timeout-minutes: ${{ inputs.job-timeout-minutes }}
+    env:
+      VITE_ETHEREUM_RPC_URL: ${{ secrets.VITE_ETHEREUM_RPC_URL }}
+      VITE_ETHEREUM_BUNDLER_RPC_URL: ${{ secrets.VITE_ETHEREUM_BUNDLER_RPC_URL }}
+      VITE_ETHEREUM_BUNDLER_API_KEY: ${{ secrets.VITE_ETHEREUM_BUNDLER_API_KEY }}
+      VITE_BITCOIN_API_URL: ${{ secrets.VITE_BITCOIN_API_URL }}
+      VITE_ASSET_PRICES_URL: ${{ secrets.VITE_ASSET_PRICES_URL }}
+      VITE_REGISTER_URL: ${{ secrets.VITE_REGISTER_URL }}
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+
+      - name: Verify required secrets
+        run: bash .github/scripts/verify-secrets.sh
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '24.11.1'
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org/
+
+      - name: Setup pnpm via Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.20.0 --activate
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Verify libqc source parity
+        run: pnpm run verify:libqc-source
+
+      - name: Run unit tests
+        if: ${{ inputs.run-unit-tests }}
+        run: pnpm run test:unit
+
+      - name: Build library
+        if: ${{ inputs.run-build }}
+        run: ${{ inputs.build-command }}
+
+      - name: Run ESLint
+        if: ${{ inputs.run-lint }}
+        run: pnpm run l:c
+
+      - name: Run TypeScript typecheck
+        if: ${{ inputs.run-typecheck }}
+        run: pnpm run typecheck
+
+      - name: Check Prettier formatting
+        if: ${{ inputs.run-prettier }}
+        run: pnpm run p:c
+
+      - name: Run Knip
+        if: ${{ inputs.run-knip }}
+        run: pnpm run knip
+
+      - name: DepDoc
+        if: ${{ inputs.run-depdoc }}
+        run: pnpm dlx @project-eleven/dep-doc@0.0.4 --run
+
+      - name: Trivy
+        if: ${{ inputs.run-trivy }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: fs
+          ignore-unfixed: false
+          cache: false
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+      - name: Install Playwright Browsers
+        if: ${{ inputs.run-e2e }}
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        if: ${{ inputs.run-e2e }}
+        run: ${{ inputs.e2e-command }}
+        timeout-minutes: 15
+
+      - name: Upload Playwright report
+        if: ${{ inputs.run-e2e && inputs.upload-e2e-report && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ inputs.e2e-report-artifact-name }}
+          path: ${{ inputs.e2e-report-path }}
+          retention-days: 14
+
+      - name: Package extension zip
+        if: ${{ inputs.run-package }}
+        run: ${{ inputs.package-command }}
+
+      - name: Upload package artifact
+        if: ${{ inputs.upload-package-artifact }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ inputs.package-artifact-name }}
+          path: ${{ inputs.package-artifact-path }}
+          retention-days: ${{ inputs.package-artifact-retention-days }}

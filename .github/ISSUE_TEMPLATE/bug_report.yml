@@ -1,0 +1,86 @@
+name: Bug report
+description: Report a Quantum Vault bug with parity diagnostics.
+title: '[Bug]: '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Run `pnpm qa:prep` and retest before filing.
+        Include diagnostics from `pnpm run diagnostics:runtime`.
+
+  - type: input
+    id: artifact
+    attributes:
+      label: Build artifact tested
+      description: Pre-release tag/zip name or local build source.
+      placeholder: prerelease-<commit-sha> or local build from <commit-sha>
+    validations:
+      required: true
+
+  - type: dropdown
+    id: build_source
+    attributes:
+      label: Build source
+      options:
+        - GitHub prerelease zip from main
+        - Local build from pnpm qa:prep
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS + Chrome version
+      placeholder: macOS 15.4, Chrome 136.0.x
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      placeholder: Clear, concise description of the failure.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Runtime diagnostics output
+      description: Paste exact output from `pnpm run diagnostics:runtime`.
+      render: json
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: parity_checks
+    attributes:
+      label: QA parity checks
+      options:
+        - label: I reset extension state before reproducing.
+          required: true
+        - label: I am not using a local `file:`/`link:`/`workspace:` libqc override.
+          required: true
+        - label: I reproduced on the artifact/build source listed above.
+          required: true

@@ -1,0 +1,14 @@
+---
+description: Extension testing conventions
+globs: ["__tests__/**/*.ts"]
+alwaysApply: false
+---
+
+# Testing
+
+- Playwright E2E: __tests__/e2e/wallet.test.ts
+- Critical flows: wallet creation, lock/unlock, account switching, receive/deposit
+- Keep data-testid and visible labels stable
+- Update E2E tests in same PR when changing selectors/labels
+- Avoid timing-sensitive UI behavior that makes E2E flaky
+- For isolated logic (formatting, helpers), add focused unit tests
