@@ -19,7 +19,10 @@ const screenSessionTrackingPolicy: Record<ScreenKey, SessionTrackingPolicy> = {
   initial: untrackedSessionPolicy,
   onboarding: untrackedSessionPolicy,
   lock: untrackedSessionPolicy,
-  'vault-withdraw': untrackedSessionPolicy,
+  // SECURITY FIX: Changed the signing-sensitive vault-withdraw screen tracking policy 
+  // from an untracked session ('never') to 'when-unlocked'. This ensures the idle-lock
+  // policy correctly tracks inactivity during the review and submission of withdrawals.
+  'vault-withdraw': 'when-unlocked',
   'wallet-recovery': 'always',
   home: 'always',
   account: 'always',

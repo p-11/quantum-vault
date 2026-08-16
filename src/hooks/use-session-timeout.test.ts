@@ -70,6 +70,23 @@ describe('shouldTrackSessionForScreen', () => {
     ).toBe(true);
   });
 
+  // SECURITY FIX: This regression test proves that inactivity tracking is correctly enforced
+  // on the sensitive withdrawal screen while the vault is unlocked, and stops tracking when locked.
+  it('tracks session on vault withdrawal only while the vault is unlocked', () => {
+    expect(
+      shouldTrackSessionForScreen({
+        activeScreen: 'vault-withdraw',
+        isVaultUnlocked: false
+      })
+    ).toBe(false);
+    expect(
+      shouldTrackSessionForScreen({
+        activeScreen: 'vault-withdraw',
+        isVaultUnlocked: true
+      })
+    ).toBe(true);
+  });
+
   it('never tracks session on lock screen', () => {
     expect(
       shouldTrackSessionForScreen({
