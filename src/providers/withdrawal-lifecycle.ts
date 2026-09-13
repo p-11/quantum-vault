@@ -220,26 +220,32 @@ export const resolvePostWithdrawSourceState = ({
  * "idle" state.
  *
  * The source must reflect the post-withdraw state in all cases. The
- * destination-side signal is satisfied either by a newly minted replacement
- * account (external-destination withdraws) or by the user-owned destination
- * account that already existed before the withdraw (same-chain owned
- * destination withdraws - the "skip" branch of
- * `resolveReplacementVaultAction`).
+ * destination-side signal is only required when the withdraw path actually
+ * minted a replacement vault (`expectsReplacementAccount`): it is satisfied
+ * either by that newly minted account or by the user-owned destination
+ * account that already existed before the withdraw.
  *
- * Without this branch the skip-path withdraw would poll until the 30s
- * timeout and surface a false "timeout" status, because `replacementAccount`
- * never appears when no fresh account is minted.
+ * When no replacement was minted - the destination is an owned vault, or
+ * another same-chain vault was already `safe` / had an unknown status
+ * (`resolveReplacementVaultAction`'s skip branches), or the reconcile was
+ * auto-resumed on a later boot after the replacement already existed - no
+ * fresh account will ever appear outside the baseline. Waiting for one
+ * would poll until the 30s timeout and surface a false "timeout" status,
+ * so the source-side signal alone is terminal in that case.
  */
 export const isPostWithdrawComplete = ({
+  expectsReplacementAccount,
   ownedDestinationAccountId,
   replacementAccount,
   sourceReflectsPostWithdraw
 }: {
+  expectsReplacementAccount: boolean;
   ownedDestinationAccountId: string | undefined;
   replacementAccount: AccountWithId | undefined;
   sourceReflectsPostWithdraw: boolean;
 }): boolean => {
   if (!sourceReflectsPostWithdraw) return false;
+  if (!expectsReplacementAccount) return true;
   return (
     ownedDestinationAccountId !== undefined || replacementAccount !== undefined
   );
