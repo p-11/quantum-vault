@@ -10,6 +10,7 @@ vi.mock('@project-eleven/libqc', () => ({
 
 import {
   getDefaultChainGroupsToInspect,
+  maxSafeVaultRepairsPerChain,
   repairUnsafeDefaultAccounts,
   resolveSafeVaultRepairAction,
   type AccountStatus
@@ -84,6 +85,65 @@ const createRepairVault = ({
   })),
   createAccount
 });
+
+/**
+ * Mirrors a recovered wallet: `importWallet` persists no accounts, so every
+ * `createAccount(chainId, _, _, index)` call re-derives an index whose
+ * on-chain status is fixed by `statusByIndex`. The mock persists the minted
+ * account so subsequent `listAccounts` calls see it, exactly like libqc.
+ */
+const createRecoveredRepairVault = ({
+  chainIdValue,
+  supportedChains,
+  statusByIndex,
+  statusErrorByIndex = {},
+  initialIndices
+}: {
+  chainIdValue: string;
+  supportedChains: ReadonlyArray<{ chainId: ChainId }>;
+  statusByIndex: ReadonlyArray<AccountStatus>;
+  statusErrorByIndex?: Readonly<Record<number, Error>>;
+  initialIndices: ReadonlyArray<number>;
+}) => {
+  const accounts: TestAccount[] = initialIndices.map(index =>
+    createAccount(chainIdValue, `index-${index}`)
+  );
+  const indexByAccountId = new Map(
+    initialIndices.map(index => [`${chainIdValue}:index-${index}`, index])
+  );
+
+  return {
+    listAccounts: vi.fn(async () => [...accounts]),
+    getSupportedChains: vi.fn(() => supportedChains),
+    getAccount: vi.fn(async (accountId: TestPersistedAccountId) => ({
+      getStatus: vi.fn(async () => {
+        const index = indexByAccountId.get(accountId.toString());
+        if (index === undefined) {
+          throw new Error(`Unknown account ${accountId.toString()}`);
+        }
+        const statusError = statusErrorByIndex[index];
+        if (statusError !== undefined) {
+          throw statusError;
+        }
+        return statusByIndex[index] ?? 'safe';
+      })
+    })),
+    createAccount: vi.fn(
+      async (
+        chainId: ChainId,
+        _forceNewAddress?: boolean,
+        _version?: unknown,
+        addressIndex?: number
+      ) => {
+        const index = addressIndex ?? accounts.length;
+        const account = createAccount(chainId.toString(), `index-${index}`);
+        accounts.push(account);
+        indexByAccountId.set(account.id.toString(), index);
+        return undefined;
+      }
+    )
+  };
+};
 
 describe('resolveSafeVaultRepairAction', () => {
   it('skips when at least one account on the chain is already safe', () => {
@@ -320,5 +380,88 @@ describe('repairUnsafeDefaultAccounts', () => {
       error: createError,
       kind: 'account-creation-failed'
     });
+  });
+
+  it('rediscovers every rotated vault of a recovered wallet in a single pass', async () => {
+    // Recovered wallet: index 0 restored by the missing-chain branch. On
+    // chain, indices 0-2 were each drained by an earlier rotation and index
+    // 3 holds the funds and has never signed.
+    const bitcoinChain = createChainId(bitcoinMainnetChainId);
+    const vault = createRecoveredRepairVault({
+      chainIdValue: bitcoinMainnetChainId,
+      supportedChains: [
+        { chainId: bitcoinChain },
+        { chainId: createChainId(ethereumChainId) }
+      ],
+      statusByIndex: ['vulnerable', 'vulnerable', 'vulnerable', 'safe'],
+      initialIndices: [0]
+    });
+
+    await expect(repairUnsafeDefaultAccounts({ vault })).resolves.toBe(3);
+    expect(vault.createAccount.mock.calls.map(call => call[3])).toEqual([
+      1, 2, 3
+    ]);
+  });
+
+  it('stops after the first repair when the minted vault is safe', async () => {
+    const bitcoinChain = createChainId(bitcoinMainnetChainId);
+    const vault = createRecoveredRepairVault({
+      chainIdValue: bitcoinMainnetChainId,
+      supportedChains: [
+        { chainId: bitcoinChain },
+        { chainId: createChainId(ethereumChainId) }
+      ],
+      statusByIndex: ['vulnerable', 'safe'],
+      initialIndices: [0]
+    });
+
+    await expect(repairUnsafeDefaultAccounts({ vault })).resolves.toBe(1);
+    expect(vault.createAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps chained repairs per chain when every minted vault keeps reporting vulnerable', async () => {
+    const bitcoinChain = createChainId(bitcoinMainnetChainId);
+    const vault = createRecoveredRepairVault({
+      chainIdValue: bitcoinMainnetChainId,
+      supportedChains: [
+        { chainId: bitcoinChain },
+        { chainId: createChainId(ethereumChainId) }
+      ],
+      statusByIndex: Array.from(
+        { length: maxSafeVaultRepairsPerChain + 5 },
+        () => 'vulnerable' as const
+      ),
+      initialIndices: [0]
+    });
+
+    await expect(repairUnsafeDefaultAccounts({ vault })).resolves.toBe(
+      maxSafeVaultRepairsPerChain
+    );
+  });
+
+  it('stops chaining and warns when the minted vault status cannot be inspected', async () => {
+    const bitcoinChain = createChainId(bitcoinMainnetChainId);
+    const onRepairWarning = vi.fn();
+    const vault = createRecoveredRepairVault({
+      chainIdValue: bitcoinMainnetChainId,
+      supportedChains: [
+        { chainId: bitcoinChain },
+        { chainId: createChainId(ethereumChainId) }
+      ],
+      statusByIndex: ['vulnerable'],
+      statusErrorByIndex: { 1: new Error('status unavailable') },
+      initialIndices: [0]
+    });
+
+    await expect(
+      repairUnsafeDefaultAccounts({ vault, onRepairWarning })
+    ).resolves.toBe(1);
+    expect(vault.createAccount).toHaveBeenCalledTimes(1);
+    expect(onRepairWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chainId: bitcoinChain,
+        kind: 'status-inspection-failed'
+      })
+    );
   });
 });
