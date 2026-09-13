@@ -7,10 +7,18 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@project-eleven/libqc', () => ({
   EvmAccountClient: class EvmAccountClient {},
+  InsufficientNativeBalanceForGasError: class InsufficientNativeBalanceForGasError extends Error {},
+  InvalidDestinationAddressError: class InvalidDestinationAddressError extends Error {},
+  NoWithdrawableAssetsError: class NoWithdrawableAssetsError extends Error {},
   formatUnits: (value: bigint) => value.toString(),
   isNativeAsset: (asset: { symbol: string }) =>
     asset.symbol === 'BTC' || asset.symbol === 'ETH'
 }));
+
+import {
+  InvalidDestinationAddressError,
+  NoWithdrawableAssetsError
+} from '@project-eleven/libqc';
 
 import {
   NonInterfaceAssetBalanceError,
@@ -154,5 +162,87 @@ describe('vault operations', () => {
         createAccount()
       )
     ).rejects.toBeInstanceOf(NonInterfaceAssetBalanceError);
+  });
+
+  describe('Bitcoin fee estimation outcomes', () => {
+    const bitcoinAsset = createAsset('BTC');
+    const bitcoinDestination = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
+
+    const createBitcoinVault = (
+      estimateEmptyVaultFee: (destination: string) => Promise<bigint>
+    ) => ({
+      getAccount: async () => ({
+        listAssets: async () => [bitcoinAsset],
+        getBalances: async () => [
+          createBalance({ symbol: 'BTC', balance: 1_000n })
+        ],
+        estimateEmptyVaultFee
+      })
+    });
+
+    it('reports the estimated fee when estimation succeeds', async () => {
+      const estimateEmptyVaultFee = vi.fn(async () => 450n);
+
+      await expect(
+        loadVaultWithdrawSummary(
+          createBitcoinVault(estimateEmptyVaultFee),
+          createAccount(),
+          bitcoinDestination
+        )
+      ).resolves.toEqual({
+        status: 'ready',
+        items: [
+          {
+            asset: bitcoinAsset,
+            balance: createBalance({ symbol: 'BTC', balance: 1_000n })
+          }
+        ],
+        estimatedFee: '~450 BTC'
+      });
+      expect(estimateEmptyVaultFee).toHaveBeenCalledWith(bitcoinDestination);
+    });
+
+    it('blocks the review when the SDK rejects the destination address', async () => {
+      await expect(
+        loadVaultWithdrawSummary(
+          createBitcoinVault(async destination => {
+            throw new InvalidDestinationAddressError(destination);
+          }),
+          createAccount(),
+          '0x8ba1f109551bD432803012645Ac136ddd64DBA72'
+        )
+      ).resolves.toEqual({ status: 'invalid-destination' });
+    });
+
+    it('blocks the review when nothing spendable remains after fees', async () => {
+      await expect(
+        loadVaultWithdrawSummary(
+          createBitcoinVault(async () => {
+            throw new NoWithdrawableAssetsError('account-1');
+          }),
+          createAccount(),
+          bitcoinDestination
+        )
+      ).resolves.toEqual({ status: 'insufficient-for-fee' });
+    });
+
+    it('keeps the review confirmable with an unknown fee on transient estimate failures', async () => {
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      await expect(
+        loadVaultWithdrawSummary(
+          createBitcoinVault(async () => {
+            throw new Error('fee provider unavailable');
+          }),
+          createAccount(),
+          bitcoinDestination
+        )
+      ).resolves.toMatchObject({ status: 'ready', estimatedFee: null });
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+
+      consoleErrorSpy.mockRestore();
+    });
   });
 });

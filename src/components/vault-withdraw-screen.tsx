@@ -4,6 +4,7 @@ import { useWallet } from '@/hooks/use-wallet';
 import { ensurePresent } from '@/lib/assert';
 import { attempt } from '@/lib/attempt';
 import { getVaultName, withdrawFlowCopy } from '@/lib/copy';
+import { getAddressValidationError } from '@/lib/withdraw-destination';
 import { match } from '@/lib/match';
 import { convertDuration } from '@/lib/time';
 import { formatAssetBalance } from '@/lib/utils';
@@ -29,7 +30,6 @@ import {
   InvalidDestinationAddressError,
   NoWithdrawableAssetsError,
   VaultCorruptedError,
-  isAddress,
   isBitcoinChain,
   type PersistedAccount
 } from '@project-eleven/libqc';
@@ -114,6 +114,22 @@ const AssetList = ({ chainIconUrl, summaryState }: AssetListProps) => {
         Unsupported token balances cannot be withdrawn in this version.
       </p>
     ),
+    'invalid-destination': () => (
+      <p
+        data-testid='withdraw-review-invalid-destination'
+        className='type-body-sm text-destructive'
+      >
+        {withdrawFlowCopy.reviewInvalidDestination}
+      </p>
+    ),
+    'insufficient-for-fee': () => (
+      <p
+        data-testid='withdraw-review-insufficient-for-fee'
+        className='type-body-sm text-destructive'
+      >
+        {withdrawFlowCopy.reviewInsufficientForFee}
+      </p>
+    ),
     idle: () => null
   });
 };
@@ -144,6 +160,12 @@ const ReviewStep = ({
   const canConfirm = summaryState.status === 'ready';
   const estimatedFee =
     summaryState.status === 'ready' ? summaryState.estimatedFee : null;
+  // A fee line is meaningless once fee estimation itself has ruled the
+  // withdrawal out; showing "Unable to estimate" next to the blocking
+  // message would read as a transient fetch failure.
+  const isFeeRowVisible =
+    summaryState.status !== 'invalid-destination' &&
+    summaryState.status !== 'insufficient-for-fee';
 
   return (
     <div
@@ -187,16 +209,20 @@ const ReviewStep = ({
           ) : null}
         </div>
 
-        <div className='mt-4 flex items-center justify-between'>
-          <p className='type-footnote m-0'>{withdrawFlowCopy.reviewFeeLabel}</p>
-          {summaryState.status === 'loading' ? (
-            <Skeleton className='h-4 w-24' />
-          ) : (
+        {isFeeRowVisible ? (
+          <div className='mt-4 flex items-center justify-between'>
             <p className='type-footnote m-0'>
-              {estimatedFee ?? 'Unable to estimate'}
+              {withdrawFlowCopy.reviewFeeLabel}
             </p>
-          )}
-        </div>
+            {summaryState.status === 'loading' ? (
+              <Skeleton className='h-4 w-24' />
+            ) : (
+              <p className='type-footnote m-0'>
+                {estimatedFee ?? 'Unable to estimate'}
+              </p>
+            )}
+          </div>
+        ) : null}
       </div>
 
       <div className='flex flex-col gap-3'>
@@ -489,37 +515,6 @@ const getInitialStep = ({
   }
 
   return 'entry-loading';
-};
-
-const addressValidationByNamespace = {
-  bip122: {
-    getError: () => null
-  },
-  eip155: {
-    getError: (destination: string) =>
-      isAddress(destination) ? null : 'Please enter a valid EVM address.'
-  }
-} as const;
-
-type SupportedWithdrawNamespace = keyof typeof addressValidationByNamespace;
-
-const isSupportedWithdrawNamespace = (
-  namespace: string
-): namespace is SupportedWithdrawNamespace =>
-  namespace in addressValidationByNamespace;
-
-const getAddressValidationError = ({
-  destination,
-  namespace
-}: {
-  destination: string;
-  namespace: string;
-}): string | null => {
-  if (!isSupportedWithdrawNamespace(namespace)) {
-    throw new Error(`Unsupported withdraw namespace: ${namespace}`);
-  }
-
-  return addressValidationByNamespace[namespace].getError(destination);
 };
 
 type SuggestedSafeDestination = {

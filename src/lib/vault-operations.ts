@@ -1,4 +1,5 @@
 import { ensurePresent } from '@/lib/assert';
+import { attempt } from '@/lib/attempt';
 import {
   getInterfaceAssets,
   getPositiveNonInterfaceAssetBalances,
@@ -6,6 +7,9 @@ import {
 } from '@/lib/utils';
 import {
   EvmAccountClient,
+  InsufficientNativeBalanceForGasError,
+  InvalidDestinationAddressError,
+  NoWithdrawableAssetsError,
   formatUnits,
   type Asset,
   type BalanceResult,
@@ -26,6 +30,10 @@ export type SummaryState =
   | { status: 'ready'; items: SummaryItem[]; estimatedFee: string | null }
   | { status: 'unsupported-assets' }
   | { status: 'empty' }
+  /** The SDK rejected `destination` for this chain during fee estimation. */
+  | { status: 'invalid-destination' }
+  /** Assets exist but the net amount after network fees is not spendable. */
+  | { status: 'insufficient-for-fee' }
   | { status: 'error' };
 
 export type BitcoinWithdrawFeeEstimatingAccountClient = {
@@ -73,6 +81,39 @@ export const hasBitcoinWithdrawFeeEstimateCapability = (
   accountClient !== null &&
   'estimateEmptyVaultFee' in accountClient &&
   typeof accountClient.estimateEmptyVaultFee === 'function';
+
+type FeeEstimateChain = 'EVM' | 'Bitcoin';
+
+type FeeEstimateOutcome =
+  | { kind: 'estimated'; fee: bigint }
+  | { kind: 'unavailable' }
+  | { kind: 'invalid-destination' }
+  | { kind: 'insufficient-for-fee' };
+
+/**
+ * Maps a fee-estimation failure to a summary outcome. libqc runs the same
+ * destination + dust/gas validation during estimation that it later runs
+ * inside `emptyVault`, so a typed rejection here is authoritative and must
+ * block the review step instead of degrading to "fee unavailable" and
+ * letting the user confirm a withdrawal that is guaranteed to fail.
+ */
+const resolveFeeEstimateFailure = (
+  chain: FeeEstimateChain,
+  error: unknown
+): FeeEstimateOutcome => {
+  if (error instanceof InvalidDestinationAddressError) {
+    return { kind: 'invalid-destination' };
+  }
+  if (
+    error instanceof NoWithdrawableAssetsError ||
+    error instanceof InsufficientNativeBalanceForGasError
+  ) {
+    return { kind: 'insufficient-for-fee' };
+  }
+
+  console.error(`Failed to estimate ${chain} withdrawal fee:`, error);
+  return { kind: 'unavailable' };
+};
 
 export class NonInterfaceAssetBalanceError extends Error {
   constructor() {
@@ -129,6 +170,10 @@ export const assertNoNonInterfaceAssetBalances = async (
  *   - `'empty'` — the account has no assets with a non-zero balance.
  *   - `'ready'` — assets were found; `estimatedFee` is a human-readable fee
  *     string, or `null` when estimation fails or is unsupported for the chain.
+ *   - `'invalid-destination'` — the SDK rejected `destination` for the
+ *     account's chain/network while estimating; `emptyVault` would fail too.
+ *   - `'insufficient-for-fee'` — assets exist but nothing spendable remains
+ *     after network fees (dust / gas); `emptyVault` would fail too.
  *   - `'error'` — the asset or balance fetch itself failed.
  */
 export const loadVaultWithdrawSummary = async (
@@ -161,36 +206,77 @@ export const loadVaultWithdrawSummary = async (
     return { status: 'empty' };
   }
 
-  let estimatedFee: string | null = null;
   const nativeItem = items.find(({ asset }) => isNativeAsset(asset));
-  if (nativeItem && accountClient instanceof EvmAccountClient) {
-    try {
-      const estimate = await accountClient.getTransferGasCostEstimate(
-        1n as TransactionValue,
-        destination as EvmAddress
-      );
-      const perOpFee = computeFeeCost(estimate);
-      // Rough overestimate: assumes each asset costs the same as the native transfer.
-      // ERC-20 transfers are typically cheaper, but this errs on the safe side.
-      const totalFee = perOpFee * BigInt(items.length);
-      const { symbol } = nativeItem.asset;
-      estimatedFee = `~${formatUnits(totalFee, nativeItem.asset.decimals)} ${symbol}`;
-    } catch (error) {
-      console.error('Failed to estimate EVM withdrawal fee:', error);
-      estimatedFee = null;
-    }
-  } else if (
-    nativeItem &&
-    hasBitcoinWithdrawFeeEstimateCapability(accountClient)
-  ) {
-    try {
-      const fee = await accountClient.estimateEmptyVaultFee(destination);
-      estimatedFee = `~${formatUnits(fee, nativeItem.asset.decimals)} ${nativeItem.asset.symbol}`;
-    } catch (error) {
-      console.error('Failed to estimate Bitcoin withdrawal fee:', error);
-      estimatedFee = null;
-    }
+  const feeEstimateOutcome = await estimateWithdrawFee({
+    accountClient,
+    destination,
+    itemCount: items.length,
+    nativeItem
+  });
+
+  if (feeEstimateOutcome.kind === 'invalid-destination') {
+    return { status: 'invalid-destination' };
+  }
+  if (feeEstimateOutcome.kind === 'insufficient-for-fee') {
+    return { status: 'insufficient-for-fee' };
+  }
+  if (feeEstimateOutcome.kind === 'unavailable') {
+    return { status: 'ready', items, estimatedFee: null };
   }
 
-  return { status: 'ready', items, estimatedFee };
+  const { asset: nativeAsset } = ensurePresent(
+    nativeItem,
+    'native asset for estimated withdrawal fee'
+  );
+  return {
+    status: 'ready',
+    items,
+    estimatedFee: `~${formatUnits(feeEstimateOutcome.fee, nativeAsset.decimals)} ${nativeAsset.symbol}`
+  };
+};
+
+const estimateWithdrawFee = async ({
+  accountClient,
+  destination,
+  itemCount,
+  nativeItem
+}: {
+  accountClient: VaultOperationsAccountClient;
+  destination: string;
+  itemCount: number;
+  nativeItem: SummaryItem | undefined;
+}): Promise<FeeEstimateOutcome> => {
+  if (nativeItem === undefined) {
+    return { kind: 'unavailable' };
+  }
+
+  if (accountClient instanceof EvmAccountClient) {
+    const estimateResult = await attempt(() =>
+      accountClient.getTransferGasCostEstimate(
+        1n as TransactionValue,
+        destination as EvmAddress
+      )
+    );
+    if ('error' in estimateResult) {
+      return resolveFeeEstimateFailure('EVM', estimateResult.error);
+    }
+    // Rough overestimate: assumes each asset costs the same as the native transfer.
+    // ERC-20 transfers are typically cheaper, but this errs on the safe side.
+    return {
+      kind: 'estimated',
+      fee: computeFeeCost(estimateResult.data) * BigInt(itemCount)
+    };
+  }
+
+  if (hasBitcoinWithdrawFeeEstimateCapability(accountClient)) {
+    const estimateResult = await attempt(() =>
+      accountClient.estimateEmptyVaultFee(destination)
+    );
+    if ('error' in estimateResult) {
+      return resolveFeeEstimateFailure('Bitcoin', estimateResult.error);
+    }
+    return { kind: 'estimated', fee: estimateResult.data };
+  }
+
+  return { kind: 'unavailable' };
 };

@@ -108,6 +108,12 @@ export const withdrawFlowCopy = {
   addAddressFieldLabel: (chainName: string) =>
     `Enter your ${chainName} withdrawal address:`,
   addAddressPlaceholder: '0x...',
+  invalidEvmAddressError: 'Please enter a valid EVM address.',
+  invalidBitcoinAddressError: 'Please enter a valid Bitcoin mainnet address.',
+  reviewInvalidDestination:
+    'The destination address is not valid for this network. Please go back and check the address.',
+  reviewInsufficientForFee:
+    'The vault balance is too small to cover network fees. Nothing can be withdrawn.',
   reviewTitle: 'You will send',
   reviewToLegend: 'TO',
   reviewFeeLabel: 'TX FEES',
