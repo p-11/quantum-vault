@@ -857,6 +857,7 @@ const WalletProviderReady = ({ vault, children }: WalletProviderReadyProps) => {
       baselineSameChainAccountIds,
       initialLatestRecord,
       ownedDestinationAccountId,
+      expectsReplacementAccount,
       registerInFlightRecordId
     }: {
       requestId: number;
@@ -869,6 +870,7 @@ const WalletProviderReady = ({ vault, children }: WalletProviderReadyProps) => {
       baselineSameChainAccountIds: ReadonlySet<string>;
       initialLatestRecord: WithdrawalRecord | undefined;
       ownedDestinationAccountId: string | undefined;
+      expectsReplacementAccount: boolean;
       registerInFlightRecordId: (recordId: string) => void;
     }): Promise<Extract<WithdrawSyncStatus, 'idle' | 'timeout' | 'failed'>> => {
       const startedAt = Date.now();
@@ -998,6 +1000,7 @@ const WalletProviderReady = ({ vault, children }: WalletProviderReadyProps) => {
 
           if (
             isPostWithdrawComplete({
+              expectsReplacementAccount,
               ownedDestinationAccountId,
               replacementAccount,
               sourceReflectsPostWithdraw
@@ -1033,6 +1036,7 @@ const WalletProviderReady = ({ vault, children }: WalletProviderReadyProps) => {
       sourceRecordId,
       initialLatestRecord,
       ownedDestinationAccountId,
+      expectsReplacementAccount,
       syncVisibility
     }: {
       sourceAccount: PersistedAccount;
@@ -1040,6 +1044,13 @@ const WalletProviderReady = ({ vault, children }: WalletProviderReadyProps) => {
       sourceRecordId?: string;
       initialLatestRecord: WithdrawalRecord | undefined;
       ownedDestinationAccountId?: string;
+      /**
+       * Whether this withdraw minted a fresh same-chain vault that the loop
+       * must observe before settling. `false` for the skip branches of
+       * `resolveReplacementVaultAction` and for auto-resumed reconciles,
+       * where no account outside the baseline will ever appear.
+       */
+      expectsReplacementAccount: boolean;
       syncVisibility: WithdrawReconcileSyncVisibility;
     }): WithdrawVaultFundsResult => {
       const sourceAccountId = sourceAccount.id.toString();
@@ -1092,6 +1103,7 @@ const WalletProviderReady = ({ vault, children }: WalletProviderReadyProps) => {
               baselineSameChainAccountIds,
               initialLatestRecord,
               ownedDestinationAccountId,
+              expectsReplacementAccount,
               registerInFlightRecordId
             })
           );
@@ -1182,6 +1194,10 @@ const WalletProviderReady = ({ vault, children }: WalletProviderReadyProps) => {
       sourceRecordId: sourceRecord.id,
       initialLatestRecord: sourceRecord,
       ownedDestinationAccountId,
+      // Any replacement vault minted by the original withdraw already sits in
+      // the baseline account list on resume, so it can never be detected as
+      // "new" here. Settle on the source-side signal alone.
+      expectsReplacementAccount: false,
       syncVisibility: 'silent'
     });
   }, [
@@ -1306,6 +1322,7 @@ const WalletProviderReady = ({ vault, children }: WalletProviderReadyProps) => {
         sourceRecordId: optimisticRecord.id,
         initialLatestRecord: optimisticRecord,
         ownedDestinationAccountId,
+        expectsReplacementAccount: replacementVaultAction.kind === 'create',
         syncVisibility: 'visible'
       });
     },

@@ -366,8 +366,20 @@ describe('isPostWithdrawComplete', () => {
   it('returns false when the source has not yet reflected the withdraw', () => {
     expect(
       isPostWithdrawComplete({
+        expectsReplacementAccount: true,
         ownedDestinationAccountId: undefined,
         replacementAccount,
+        sourceReflectsPostWithdraw: false
+      })
+    ).toBe(false);
+  });
+
+  it('returns false when the source has not yet reflected the withdraw even without an expected replacement', () => {
+    expect(
+      isPostWithdrawComplete({
+        expectsReplacementAccount: false,
+        ownedDestinationAccountId: undefined,
+        replacementAccount: undefined,
         sourceReflectsPostWithdraw: false
       })
     ).toBe(false);
@@ -376,6 +388,7 @@ describe('isPostWithdrawComplete', () => {
   it('returns true when the source reflects post-withdraw and a replacement was minted', () => {
     expect(
       isPostWithdrawComplete({
+        expectsReplacementAccount: true,
         ownedDestinationAccountId: undefined,
         replacementAccount,
         sourceReflectsPostWithdraw: true
@@ -386,6 +399,7 @@ describe('isPostWithdrawComplete', () => {
   it('returns true when the source reflects post-withdraw and destination is an owned vault, even without a new replacement', () => {
     expect(
       isPostWithdrawComplete({
+        expectsReplacementAccount: false,
         ownedDestinationAccountId: 'owned-destination',
         replacementAccount: undefined,
         sourceReflectsPostWithdraw: true
@@ -393,13 +407,25 @@ describe('isPostWithdrawComplete', () => {
     ).toBe(true);
   });
 
-  it('returns false when neither a replacement account nor an owned destination is present, even if source reflects post-withdraw', () => {
+  it('returns false while an expected replacement account has not appeared yet', () => {
     expect(
       isPostWithdrawComplete({
+        expectsReplacementAccount: true,
         ownedDestinationAccountId: undefined,
         replacementAccount: undefined,
         sourceReflectsPostWithdraw: true
       })
     ).toBe(false);
+  });
+
+  it('returns true on the source-side signal alone when no replacement was minted (existing safe sibling / unknown status / resumed reconcile)', () => {
+    expect(
+      isPostWithdrawComplete({
+        expectsReplacementAccount: false,
+        ownedDestinationAccountId: undefined,
+        replacementAccount: undefined,
+        sourceReflectsPostWithdraw: true
+      })
+    ).toBe(true);
   });
 });
