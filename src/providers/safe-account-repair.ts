@@ -155,6 +155,22 @@ type RepairUnsafeDefaultAccountsInput = {
   }) => void;
 };
 
+/**
+ * Upper bound on consecutive safe-vault repairs per default chain within a
+ * single pass. libqc's `importWallet` persists no accounts, so a recovered
+ * wallet only gets its index-0 vault back from the missing-chain branch;
+ * every later vault (each `emptyVault` rotation mints the next index) has
+ * to be re-derived here. Chaining repairs until the freshly minted vault
+ * reports `safe` rediscovers them in one hydration instead of one index per
+ * popup boot. The cap keeps a pathological status provider from spinning.
+ */
+export const maxSafeVaultRepairsPerChain = 20;
+
+const getAccountIds = (
+  accounts: ReadonlyArray<AccountIdentity>
+): ReadonlySet<string> =>
+  new Set(accounts.map(account => account.id.toString()));
+
 export const repairUnsafeDefaultAccounts = async ({
   vault,
   onRepairWarning
@@ -166,15 +182,20 @@ export const repairUnsafeDefaultAccounts = async ({
   });
   let createdCount = 0;
 
-  for (const group of safetyNetGroups) {
-    const latestAccounts = await vault.listAccounts();
-    const chainAccountStatusesResult = await attempt(() =>
+  const inspectStatuses = (accounts: ReadonlyArray<AccountIdentity>) =>
+    attempt(() =>
       Promise.all(
-        group.accountsOnChain.map(async account => {
+        accounts.map(async account => {
           const accountClient = await vault.getAccount(account.id);
           return accountClient.getStatus();
         })
       )
+    );
+
+  for (const group of safetyNetGroups) {
+    let latestAccounts = await vault.listAccounts();
+    const chainAccountStatusesResult = await inspectStatuses(
+      group.accountsOnChain
     );
     if ('error' in chainAccountStatusesResult) {
       onRepairWarning?.({
@@ -185,33 +206,70 @@ export const repairUnsafeDefaultAccounts = async ({
       continue;
     }
 
-    const repairAction = resolveSafeVaultRepairAction({
-      chainAccountStatuses: chainAccountStatusesResult.data,
-      allAccounts: latestAccounts,
-      chainId: group.chainId
-    });
-    if (repairAction.kind === 'skip') {
-      continue;
-    }
-
-    const createResult = await attempt(() =>
-      vault.createAccount(
-        group.chainId,
-        undefined,
-        undefined,
-        repairAction.addressIndex
-      )
-    );
-    if ('error' in createResult) {
-      onRepairWarning?.({
-        chainId: group.chainId,
-        error: createResult.error,
-        kind: 'account-creation-failed'
+    let chainAccountStatuses: ReadonlyArray<AccountStatus> =
+      chainAccountStatusesResult.data;
+    for (
+      let repairAttempt = 0;
+      repairAttempt < maxSafeVaultRepairsPerChain;
+      repairAttempt += 1
+    ) {
+      const repairAction = resolveSafeVaultRepairAction({
+        chainAccountStatuses,
+        allAccounts: latestAccounts,
+        chainId: group.chainId
       });
-      continue;
-    }
+      if (repairAction.kind === 'skip') {
+        break;
+      }
 
-    createdCount += 1;
+      const createResult = await attempt(() =>
+        vault.createAccount(
+          group.chainId,
+          undefined,
+          undefined,
+          repairAction.addressIndex
+        )
+      );
+      if ('error' in createResult) {
+        onRepairWarning?.({
+          chainId: group.chainId,
+          error: createResult.error,
+          kind: 'account-creation-failed'
+        });
+        break;
+      }
+
+      createdCount += 1;
+
+      // Inspect what was just minted. A brand-new derivation is `safe` and
+      // ends the chain; a recovered index that was already rotated on-chain
+      // is `vulnerable` and the loop advances to the next index.
+      const knownAccountIds = getAccountIds(latestAccounts);
+      latestAccounts = await vault.listAccounts();
+      const mintedAccounts = latestAccounts.filter(
+        account =>
+          account.chainId.toString() === group.chainId.toString() &&
+          !knownAccountIds.has(account.id.toString())
+      );
+      if (mintedAccounts.length === 0) {
+        break;
+      }
+
+      const mintedStatusesResult = await inspectStatuses(mintedAccounts);
+      if ('error' in mintedStatusesResult) {
+        onRepairWarning?.({
+          chainId: group.chainId,
+          error: mintedStatusesResult.error,
+          kind: 'status-inspection-failed'
+        });
+        break;
+      }
+
+      chainAccountStatuses = [
+        ...chainAccountStatuses,
+        ...mintedStatusesResult.data
+      ];
+    }
   }
 
   return createdCount;
